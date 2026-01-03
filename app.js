@@ -1,96 +1,99 @@
-// 1) Nastavi URL tvoje PNG maske (16:9, z prosojnim obrazom)
-const OVERLAY_URL = "https://tvoj-domen.si/gimnazija.png";
+// Overlay slika mora biti v isti mapi kot index.html (repo root)
+const OVERLAY_URL = "gimnazijec.png";
+
+// 16:9 izhod
+const OUT_W = 1280;
+const OUT_H = 720;
 
 const video = document.getElementById("video");
-const canvas = document.getElementById("preview");
-const ctx = canvas.getContext("2d");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d", { alpha: true });
 
-const startCamBtn = document.getElementById("startCam");
-const snapBtn = document.getElementById("snap");
-const downloadBtn = document.getElementById("download");
-const resetBtn = document.getElementById("reset");
+const btnStart = document.getElementById("btnStart");
+const btnSnap = document.getElementById("btnSnap");
+const btnDownload = document.getElementById("btnDownload");
+const btnReset = document.getElementById("btnReset");
+const statusEl = document.getElementById("status");
+
+canvas.width = OUT_W;
+canvas.height = OUT_H;
 
 let stream = null;
 
-// overlay (tvoja slika gimnazija)
+// overlay
 const overlayImg = new Image();
-overlayImg.crossOrigin = "anonymous"; // pomaga, če hosting dovoljuje CORS
 overlayImg.src = OVERLAY_URL;
 
-// selfie (zajet kader iz kamere)
+// zajeta slika (frame) iz videa
 let faceImg = null;
 
-// transformacija obraza (premik + zoom)
-let faceX = canvas.width * 0.5;
-let faceY = canvas.height * 0.5;
+// transformacija zajete slike
+let faceX = OUT_W * 0.5;
+let faceY = OUT_H * 0.45;
 let faceScale = 1.0;
 
-// drag/pinch state
+// pointer state (drag/pinch)
+let pointers = new Map();
 let isDragging = false;
 let lastPointer = null;
-let pointers = new Map();
 let lastPinchDist = null;
 
-// osnovne gumbe
-snapBtn.disabled = true;
-downloadBtn.disabled = true;
+btnSnap.disabled = true;
+btnDownload.disabled = true;
 
-function stopStream() {
-  if (stream) {
+function setStatus(text){ statusEl.textContent = text; }
+
+function stopStream(){
+  if (stream){
     stream.getTracks().forEach(t => t.stop());
     stream = null;
   }
 }
 
-async function startCamera() {
+async function startCamera(){
   stopStream();
+  setStatus("Zaganjam kamero…");
+
   stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: "user" },
     audio: false
   });
+
   video.srcObject = stream;
   await video.play();
-  snapBtn.disabled = false;
+
+  btnSnap.disabled = false;
+  setStatus("Kamera pripravljena");
   renderLoop();
 }
 
 function renderLoop(){
-  // riši stalno (da vidiš live + overlay)
   drawComposite();
   requestAnimationFrame(renderLoop);
 }
 
 function drawComposite(){
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0,0,W,H);
+  ctx.clearRect(0, 0, OUT_W, OUT_H);
 
-  // 1) ozadje: live kamera
-  // "cover" v canvasu
-  drawVideoCover(video, ctx, W, H);
+  // 1) live video v 16:9 (cover)
+  drawVideoCover(video, ctx, OUT_W, OUT_H);
 
-  // 2) če imamo zajet obraz: riši ga čez video, da ga lahko nastavljaš
+  // 2) zajeta slika (premična/zoom)
   if (faceImg){
     const w = faceImg.width * faceScale;
     const h = faceImg.height * faceScale;
     ctx.drawImage(faceImg, faceX - w/2, faceY - h/2, w, h);
   }
 
-  // 3) overlay maska (tvoja PNG z luknjo)
+  // 3) overlay png (z luknjo)
   if (overlayImg.complete && overlayImg.naturalWidth){
-    ctx.drawImage(overlayImg, 0, 0, W, H);
+    ctx.drawImage(overlayImg, 0, 0, OUT_W, OUT_H);
   }
-
-  // mali napis (opcijsko)
-  ctx.save();
-  ctx.font = "22px system-ui";
-  ctx.fillStyle = "rgba(255,255,255,.85)";
-  ctx.fillText("Grm Novo mesto – biotehniška gimnazija", 24, H - 28);
-  ctx.restore();
 }
 
 function drawVideoCover(videoEl, c, W, H){
-  const vw = videoEl.videoWidth || 1280;
-  const vh = videoEl.videoHeight || 720;
+  const vw = videoEl.videoWidth || 0;
+  const vh = videoEl.videoHeight || 0;
   if (!vw || !vh) return;
 
   const videoAR = vw / vh;
@@ -98,13 +101,11 @@ function drawVideoCover(videoEl, c, W, H){
 
   let sx, sy, sw, sh;
   if (videoAR > canvasAR) {
-    // video širši -> odreži levo/desno
     sh = vh;
     sw = vh * canvasAR;
     sx = (vw - sw) / 2;
     sy = 0;
   } else {
-    // video višji -> odreži gor/dol
     sw = vw;
     sh = vw / canvasAR;
     sx = 0;
@@ -113,35 +114,33 @@ function drawVideoCover(videoEl, c, W, H){
   c.drawImage(videoEl, sx, sy, sw, sh, 0, 0, W, H);
 }
 
-function captureFace(){
-  // naredimo posnetek trenutnega videa v začasen canvas, in ga pretvorimo v sliko
+function captureFaceFrame(){
+  // zajemi trenutno sliko videa v 16:9 okvir
   const tmp = document.createElement("canvas");
-  tmp.width = canvas.width;
-  tmp.height = canvas.height;
+  tmp.width = OUT_W;
+  tmp.height = OUT_H;
   const tctx = tmp.getContext("2d");
-
-  // zajemi video "cover" (enako kot prikaz)
-  drawVideoCover(video, tctx, tmp.width, tmp.height);
+  drawVideoCover(video, tctx, OUT_W, OUT_H);
 
   const img = new Image();
   img.onload = () => {
     faceImg = img;
 
-    // start nastavitve: sredina + malo večji zoom
-    faceX = canvas.width * 0.5;
-    faceY = canvas.height * 0.42;
-    faceScale = 1.1;
+    // začetne nastavitve (lahko kasneje fino nastavimo na tvojo “luknjo”)
+    faceX = OUT_W * 0.5;
+    faceY = OUT_H * 0.43;
+    faceScale = 1.12;
 
-    downloadBtn.disabled = false;
+    btnDownload.disabled = false;
+    setStatus("Obraz zajet – poravnaj in prenesi");
   };
   img.src = tmp.toDataURL("image/png");
 }
 
-function downloadImage(){
-  // final render (že je v canvasu)
+function downloadPNG(){
   const dataURL = canvas.toDataURL("image/png");
 
-  // download (Android/desktop OK; iOS včasih odpre v nov zavihek)
+  // poskusi download
   const a = document.createElement("a");
   a.href = dataURL;
   a.download = "bodoči-gimnazijec.png";
@@ -149,69 +148,76 @@ function downloadImage(){
   a.click();
   a.remove();
 
-  // fallback za iOS: odpri sliko v novem zavihku
-  // (če download ne deluje, uporabnik dolgo pritisne -> Save Image)
-  // window.open(dataURL, "_blank");
+  // iOS fallback (če download ne steče): odpri v novem zavihku
+  // uporabnik potem shrani sliko: Share → Save Image
+  setTimeout(() => {
+    // Če želiš vedno odpirati na iOS: odkomentiraj naslednjo vrstico
+    // window.open(dataURL, "_blank");
+  }, 200);
 }
 
-function reset(){
+function resetAll(){
   faceImg = null;
   faceScale = 1.0;
-  faceX = canvas.width * 0.5;
-  faceY = canvas.height * 0.5;
-  downloadBtn.disabled = true;
+  faceX = OUT_W * 0.5;
+  faceY = OUT_H * 0.45;
+  btnDownload.disabled = true;
+  setStatus("Ponastavljeno");
 }
 
-startCamBtn.addEventListener("click", async () => {
-  try { await startCamera(); }
-  catch(e){
-    alert("Kamera ni dostopna. Preveri dovoljenja ali ali si na HTTPS strani.\n\n" + e.message);
+// Events
+btnStart.addEventListener("click", async () => {
+  try {
+    await startCamera();
+  } catch (e){
+    console.error(e);
+    alert("Kamera ni dostopna. Preveri dovoljenja za kamero in da je stran odprta preko HTTPS.\n\n" + e.message);
+    setStatus("Napaka kamere");
   }
 });
 
-snapBtn.addEventListener("click", captureFace);
-downloadBtn.addEventListener("click", downloadImage);
-resetBtn.addEventListener("click", reset);
+btnSnap.addEventListener("click", captureFaceFrame);
+btnDownload.addEventListener("click", downloadPNG);
+btnReset.addEventListener("click", resetAll);
 
-// -----------------------------
-// Interakcija: drag + zoom
-// -----------------------------
+// Drag + pinch
 canvas.addEventListener("pointerdown", (e) => {
+  if (!faceImg) return; // premikanje šele po zajemu
   canvas.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
   if (pointers.size === 1){
     isDragging = true;
-    lastPointer = {x:e.clientX, y:e.clientY};
+    lastPointer = { x: e.clientX, y: e.clientY };
   }
 });
 
 canvas.addEventListener("pointermove", (e) => {
   if (!faceImg) return;
-
   if (!pointers.has(e.pointerId)) return;
-  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = OUT_W / rect.width;
+  const scaleY = OUT_H / rect.height;
 
   if (pointers.size === 1 && isDragging && lastPointer){
-    const dx = e.clientX - lastPointer.x;
-    const dy = e.clientY - lastPointer.y;
-
-    // pretvori iz CSS px -> canvas px (ker je canvas responsive)
-    const scaleX = canvas.width / canvas.getBoundingClientRect().width;
-    const scaleY = canvas.height / canvas.getBoundingClientRect().height;
-
-    faceX += dx * scaleX;
-    faceY += dy * scaleY;
-
-    lastPointer = {x:e.clientX, y:e.clientY};
+    const dx = (e.clientX - lastPointer.x) * scaleX;
+    const dy = (e.clientY - lastPointer.y) * scaleY;
+    faceX += dx;
+    faceY += dy;
+    lastPointer = { x: e.clientX, y: e.clientY };
   }
 
   if (pointers.size === 2){
     const pts = Array.from(pointers.values());
     const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+
     if (lastPinchDist != null){
       const factor = dist / lastPinchDist;
       faceScale *= factor;
-      faceScale = Math.max(0.3, Math.min(3.0, faceScale));
+      faceScale = Math.max(0.25, Math.min(4.0, faceScale));
     }
     lastPinchDist = dist;
   }
@@ -219,42 +225,32 @@ canvas.addEventListener("pointermove", (e) => {
 
 canvas.addEventListener("pointerup", (e) => {
   pointers.delete(e.pointerId);
+
   if (pointers.size === 0){
     isDragging = false;
     lastPointer = null;
     lastPinchDist = null;
   }
+
   if (pointers.size === 1){
-    // preklop iz pinch nazaj na drag
     const pt = Array.from(pointers.values())[0];
-    lastPointer = {x: pt.x, y: pt.y};
+    lastPointer = { x: pt.x, y: pt.y };
     lastPinchDist = null;
   }
 });
 
+// wheel zoom (desktop)
 canvas.addEventListener("wheel", (e) => {
   if (!faceImg) return;
   e.preventDefault();
   const delta = Math.sign(e.deltaY);
-  // wheel gor -> zoom in
   const zoom = (delta > 0) ? 0.95 : 1.05;
   faceScale *= zoom;
-  faceScale = Math.max(0.3, Math.min(3.0, faceScale));
-}, {passive:false});
+  faceScale = Math.max(0.25, Math.min(4.0, faceScale));
+}, { passive: false });
 
-// -----------------------------
-// QR koda (opcijsko) - uporabi qrcodejs
-// V JSFiddle: External Resources dodaj:
-// https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js
-// -----------------------------
-function makeQR(){
-  if (typeof QRCode === "undefined") return;
-  const url = window.location.href;
-  document.getElementById("qrcode").innerHTML = "";
-  new QRCode(document.getElementById("qrcode"), {
-    text: url,
-    width: 180,
-    height: 180
-  });
-}
-makeQR();
+// Če se overlay ne naloži, naj vsaj opozori v konzoli
+overlayImg.addEventListener("error", () => {
+  console.warn("Overlay PNG se ni naložil. Preveri, da je datoteka 'gimnazijec.png' v repo root in pravilno poimenovana.");
+});
+
