@@ -1,24 +1,46 @@
-<div class="wrap">
-  <h2>Bodoči gimnazijec – foto filter</h2>
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bodoči gimnazijec – foto filter</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
 
-  <div class="stage">
-    <video id="video" playsinline autoplay muted></video>
-    <canvas id="preview" width="1280" height="720"></canvas>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <h1>Bodoči gimnazijec – foto filter</h1>
+      <p class="sub">
+        Dovoli kamero, poravnaj obraz v “luknjo” in prenesi sliko (16:9).
+      </p>
+    </header>
+
+    <section class="stage" aria-label="Kamera in foto filter">
+      <video id="video" playsinline autoplay muted></video>
+      <canvas id="canvas" width="1280" height="720"></canvas>
+
+      <div class="badge" id="status">Pripravljeno</div>
+    </section>
+
+    <section class="controls">
+      <button id="btnStart" class="primary">Vklopi kamero</button>
+      <button id="btnSnap" disabled>Zajemi obraz</button>
+      <button id="btnDownload" disabled>Fotografiraj &amp; prenesi</button>
+      <button id="btnReset">Ponastavi</button>
+    </section>
+
+    <p class="hint">
+      Namig: po “Zajemi obraz” lahko obraz <b>premikaš</b> (drag) in <b>zoomiraš</b>
+      (kolešček / pinch). Če ti prenosa na iPhonu ne ponudi, uporabi “Share → Save Image”.
+    </p>
+
+    <footer class="foot">
+      <small>© Grm Novo mesto – center biotehnike in turizma</small>
+    </footer>
   </div>
 
-  <div class="controls">
-    <button id="startCam">Vklopi kamero</button>
-    <button id="snap">Zajemi obraz</button>
-    <button id="download" class="primary">Fotografiraj & prenesi</button>
-    <button id="reset">Ponastavi</button>
-  </div>
+  <script src="app.js"></script>
+</body>
+</html>
 
-  <p class="hint">
-    Namig: Po “Zajemi obraz” lahko obraz <b>premikaš</b> (drag) in <b>zoomiraš</b> (kolešček miške ali pinch na telefonu).
-  </p>
-
-  <details>
-    <summary>QR koda do te strani (ko jo objaviš)</summary>
-    <div id="qrcode"></div>
-  </details>
-</div>
